@@ -1,0 +1,194 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <e-lib.h>
+
+
+char outbuf[4096] SECTION("shared_dram");
+
+
+#define _X 0x808
+#define _Y 0x809
+#define _Z 0x80a
+#define _W 0x80b
+#define _Xvalue 0x111
+#define _Yvalue 0x222
+#define _Zvalue 0x333
+#define _Wvalue 0x444
+#define _Xmail 0x80805100
+#define _Ymail 0x80905100
+#define _Zmail 0x80a05100
+#define _Wmail 0x80b05100
+#define E_REG_MULTICAST 0xf0708
+#define target  0x5100
+#define mailbox ((unsigned *) 0x5200)
+
+
+int main(void) {
+	//initialize
+	int *p0, *p1, *p2;
+	int core_num, value, fault;
+	unsigned conf;
+	int i,j,k,co;
+//	co = 0;
+	fault = 0;
+
+	for(i=0;i<4;i++) 
+	{
+		for(j=0;j<4;j++) 
+		{
+			core_num = i * 4 + j;
+			//initialize the target mem
+			p2  = e_get_global_address(i,j,(void *)target);
+			*p2 = 0x0;
+			p1  = e_get_global_address(i,j,(void *)E_REG_MULTICAST);
+/*			
+			switch(core_num)
+			{
+				case  0: *p1 = _Z; break;
+				case  1: *p1 = _X; break;
+				case  2: *p1 = _Y; break;
+				case  3: *p1 = _Z; break;
+				case  4: *p1 = _W; break;
+				case  5: *p1 = _Y; break;
+				case  6: *p1 = _Z; break;
+				case  7: *p1 = _W; break;
+				case  8: *p1 = _X; break;
+				case  9: *p1 = _Z; break;
+				case 10: *p1 = _W; break;
+				case 11: *p1 = _X; break;
+				case 12: *p1 = _Y; break;
+				case 13: *p1 = _W; break;
+				case 14: *p1 = _X; break;
+				case 15: *p1 = _Y; break;
+				default: break; 	
+			}
+*/			
+			switch(core_num)
+			{
+				case  0: *p1 = _X; break;
+				case  1: *p1 = _X; break;
+				case  2: *p1 = _Y; break;
+				case  3: *p1 = _Y; break;
+				case  4: *p1 = _X; break;
+				case  5: *p1 = _X; break;
+				case  6: *p1 = _Y; break;
+				case  7: *p1 = _Y; break;
+				case  8: *p1 = _Z; break;
+				case  9: *p1 = _Z; break;
+				case 10: *p1 = _W; break;
+				case 11: *p1 = _W; break;
+				case 12: *p1 = _Z; break;
+				case 13: *p1 = _Z; break;
+				case 14: *p1 = _W; break;
+				case 15: *p1 = _W; break;
+				default: break; 	
+			}
+			
+		}
+	}
+
+	e_wait(E_CTIMER_0, 0x30000);
+
+	//set the transaction mod to multicast
+	conf = e_reg_read(E_REG_CONFIG);
+	conf = conf & 0xffff0fff;
+	conf = conf | 0x00003000;
+	e_reg_write(E_REG_CONFIG, conf);	
+
+
+	//do the multicast
+	p0 = (int *) _Xmail;
+	*p0 = 0x111;
+	
+	//wait for some time
+//	for(k=0;k<50;k++) {co++;}
+
+	p0 = (int *) _Ymail;
+	*p0 = 0x222;
+
+//	for(k=0;k<50;k++) {co++;}
+
+	p0 = (int *) _Zmail;
+	*p0 = 0x333;
+
+//	for(k=0;k<50;k++) {co++;}
+
+	p0 = (int *) _Wmail;
+	*p0 = 0x444;
+
+
+	//set the transaction mod to regular transaction
+	conf = e_reg_read(E_REG_CONFIG);
+	conf = conf & 0xffff0fff;
+	e_reg_write(E_REG_CONFIG, conf);	
+
+
+	e_wait(E_CTIMER_0, 0x30000);
+
+	//check the results
+	for(i=0;i<4;i++) 
+	{
+		for(j=0;j<4;j++) 
+		{
+			core_num = i * 4 + j;
+			//get the target mem address
+			p2 = e_get_global_address(i,j,(void *)target);
+/*			
+			switch(core_num) 
+			{	
+				case  0: value = _Zvalue; break;
+				case  1: value = _Xvalue; break;
+				case  2: value = _Yvalue; break;
+				case  3: value = _Zvalue; break;
+				case  4: value = _Wvalue; break;
+				case  5: value = _Yvalue; break;
+				case  6: value = _Zvalue; break;
+				case  7: value = _Wvalue; break;
+				case  8: value = _Xvalue; break;
+				case  9: value = _Zvalue; break;
+				case 10: value = _Wvalue; break;
+				case 11: value = _Xvalue; break;
+				case 12: value = _Yvalue; break;
+				case 13: value = _Wvalue; break;
+				case 14: value = _Xvalue; break;
+				case 15: value = _Yvalue; break;
+				default: break; 	
+			}
+*/			
+			switch(core_num) 
+			{	
+				case  0: value = _Xvalue; break;
+				case  1: value = _Xvalue; break;
+				case  2: value = _Yvalue; break;
+				case  3: value = _Yvalue; break;
+				case  4: value = _Xvalue; break;
+				case  5: value = _Xvalue; break;
+				case  6: value = _Yvalue; break;
+				case  7: value = _Yvalue; break;
+				case  8: value = _Zvalue; break;
+				case  9: value = _Zvalue; break;
+				case 10: value = _Wvalue; break;
+				case 11: value = _Wvalue; break;
+				case 12: value = _Zvalue; break;
+				case 13: value = _Zvalue; break;
+				case 14: value = _Wvalue; break;
+				case 15: value = _Wvalue; break;
+				default: break; 	
+			}
+			
+			if(*p2 != value)
+				fault++;
+		}
+	}
+
+	//check the final result
+	*mailbox = fault;
+
+	return EXIT_SUCCESS;
+}
+
+
+
+

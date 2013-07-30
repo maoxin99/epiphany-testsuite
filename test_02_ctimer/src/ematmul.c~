@@ -1,0 +1,66 @@
+/*
+  e_hello_world.c
+
+  Copyright (C) 2012 Adapteva, Inc.
+  Contributed by Yaniv Sapir <yaniv@adapteva.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program, see the file COPYING.  If not, see
+  <http://www.gnu.org/licenses/>.
+*/
+
+// This is the DEVICE side of the Hello World example.
+// The host may load this program to any eCore. When
+// launched, the program queries the CoreID and prints
+// a message identifying itself to the shared external
+// memory buffer.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "e_lib.h"
+
+#define N 16
+#define A(i,j) a_mat[j*N+i]
+#define B(i,j) b_mat[j*N+i]
+#define C(i,j) c_mat[j*N+i]
+
+float  a_mat[N*N] __attribute__ ((section (".data_bank1")));//result matrix
+float  b_mat[N*N] __attribute__ ((section (".data_bank2")));//result matrix
+float  c_mat[N*N] __attribute__ ((section (".data_bank3")));//result matrix
+
+char outbuf[128] SECTION("shared_dram");
+
+int main(void) {
+ 	int      i,j,k;
+ 	float    sum  = 0.f;
+ 	int      fail = 0;
+	unsigned row  = 0;
+  	unsigned col  = 0;
+
+  	const char *test_name = "simple_matmul";
+
+	e_coreid_t coreid;
+	coreid = e_get_coreid();
+
+
+
+
+
+
+
+	sprintf(outbuf, "Hello World from core 0x%03x!", coreid);
+
+	return EXIT_SUCCESS;
+}

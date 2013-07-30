@@ -1,0 +1,222 @@
+// FIR-16
+// Optimized C: 620 cycles
+// Naive code: 1562 cycles
+
+/*
+   e-gcc -Wall -O3 -std=c99 \
+         -mlong-calls \
+         -mfp-mode=round-nearest \
+         -ffp-contract=fast \
+         -funroll-loops \
+         -T ${EPIPHANY_HOME}/bsps/emek3/fast.ldf \
+         -o ./fir.elf \
+         ./fir.c
+
+//e-gcc -T ${ELDF} src/esmatmul.c -o Debug/esmatmul.elf -le-lib
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <e_ctimers.h>
+#include <e_regs.h>
+#include <e_common.h>
+#include <e_ic.h>
+
+e_ctimer_config_t e_ctimer_stop(e_ctimer_id_t timer);
+
+#define _Ntaps 16
+#define _Ndata (_Ntaps * 2)
+
+// arrange Coefficients in descending order, i.e., Coeff_(N-1) first and Coeff_0 last
+float coeffs[_Ntaps] =
+	{0.01, 0.02, 0.04, 0.08,
+	 0.16, 0.32, 0.64, 1.28,
+	 1.28, 0.64, 0.32, 0.16,
+	 0.08, 0.04, 0.02, 0.01};
+
+
+//float inp_data[_Ndata] SECTION(".data_bank2");
+float inp_data[_Ndata] SECTION("shared_dram");
+float out_o[_Ndata]    SECTION(".data_bank3");
+float out_n[_Ndata]    SECTION(".data_bank3");
+
+//set up the expected result list
+
+//for internal mem, fast.ldf
+//unsigned result[] = {676, 0, 213, 512, 128, 8, 13, 0, 4, 100000};
+//for external mem, fast.ldf
+unsigned result[] = {26300, 0, 213, 512, 128, 264, 25750, 0, 25300, 100000};
+//for external mem, legacy.df
+//unsigned result[] = {312000, 0, 213, 512, 128, 992, 54500, 290000, 51000, 86300};
+
+
+
+
+char outbuf[1024] SECTION("shared_dram");
+
+e_ctimer_config_t event_list[] = {E_CTIMER_CLK, E_CTIMER_IDLE, E_CTIMER_IALU_INST, E_CTIMER_FPU_INST,
+				E_CTIMER_DUAL_INST, E_CTIMER_E1_STALLS, E_CTIMER_RA_STALLS,
+				E_CTIMER_EXT_FETCH_STALLS, E_CTIMER_EXT_LOAD_STALLS};
+
+
+unsigned fir(float *a, float *b, unsigned t) {
+	int wrp; // pointer to the delay line's current position.
+	int rdp; // pointer to the I/O data's current position.
+	int cp;  // pointer to the FIR coefficient's array.
+	int dlp; // pointer to delay line position per-tap.
+	unsigned time, time_s, time_e, _t;
+	_t = t;
+
+	float c[_Ntaps];      // FIR coefficients
+	float dl[_Ntaps * 2]; // FIR delay line
+	float fir[8];         // temp fir accumulators
+
+	for (cp=0; cp<_Ntaps; cp++)
+	{
+		dl[cp] = dl[cp+_Ntaps] = 0.0;
+		c[cp]  = coeffs[cp];
+	}
+
+
+
+	//count event
+	e_ctimer_set(E_CTIMER_0, E_CTIMER_MAX);
+	e_ctimer_start(E_CTIMER_0, event_list[_t]);
+	time_s = e_ctimer_get(E_CTIMER_0);
+
+
+
+	for (rdp=0; rdp<_Ndata; rdp+=_Ntaps)
+	{
+		for (wrp=0; wrp<_Ntaps; wrp+=8)
+		{
+			dl[wrp+0] = dl[wrp+_Ntaps+0] = a[rdp+wrp+0];
+			dl[wrp+1] = dl[wrp+_Ntaps+1] = a[rdp+wrp+1];
+			dl[wrp+2] = dl[wrp+_Ntaps+2] = a[rdp+wrp+2];
+			dl[wrp+3] = dl[wrp+_Ntaps+3] = a[rdp+wrp+3];
+			dl[wrp+4] = dl[wrp+_Ntaps+4] = a[rdp+wrp+4];
+			dl[wrp+5] = dl[wrp+_Ntaps+5] = a[rdp+wrp+5];
+			dl[wrp+6] = dl[wrp+_Ntaps+6] = a[rdp+wrp+6];
+			dl[wrp+7] = dl[wrp+_Ntaps+7] = a[rdp+wrp+7];
+			fir[0] = fir[1] = fir[2] = fir[3] = 0;
+			fir[4] = fir[5] = fir[6] = fir[7] = 0;
+			for (cp=0, dlp=(wrp+1); cp<_Ntaps; cp++, dlp++)
+			{
+				fir[0] += c[cp] * dl[dlp + 0];
+				fir[1] += c[cp] * dl[dlp + 1];
+				fir[2] += c[cp] * dl[dlp + 2];
+				fir[3] += c[cp] * dl[dlp + 3];
+				fir[4] += c[cp] * dl[dlp + 4];
+				fir[5] += c[cp] * dl[dlp + 5];
+				fir[6] += c[cp] * dl[dlp + 6];
+				fir[7] += c[cp] * dl[dlp + 7];
+			}
+			b[rdp+wrp+0] = fir[0];
+			b[rdp+wrp+1] = fir[1];
+			b[rdp+wrp+2] = fir[2];
+			b[rdp+wrp+3] = fir[3];
+			b[rdp+wrp+4] = fir[4];
+			b[rdp+wrp+5] = fir[5];
+			b[rdp+wrp+6] = fir[6];
+			b[rdp+wrp+7] = fir[7];
+		}
+	}
+	time_e = e_ctimer_get(E_CTIMER_0);
+	e_ctimer_stop(E_CTIMER_0);
+	time = time_s - time_e;
+
+	return time;
+}
+
+
+
+unsigned idle_test(){
+	unsigned time, time_s, time_e;
+	unsigned *ivt;
+	ivt = (unsigned *) 0x10;//address for timer1 interrupt
+	*ivt = 0x1d2;
+
+	//set ctimer1 to generate the interrupt
+	e_ctimer_set(E_CTIMER_1, 100000);
+	e_ctimer_start(E_CTIMER_1, E_CTIMER_CLK);
+
+	//set ctiemr0 to count event IDLE
+	e_ctimer_set(E_CTIMER_0, E_CTIMER_MAX);
+	e_ctimer_start(E_CTIMER_0, E_CTIMER_IDLE);
+	time_s = e_ctimer_get(E_CTIMER_0);
+
+	//set the core into IDLE
+	__asm__ __volatile__ ("idle");
+
+	time_e = e_ctimer_get(E_CTIMER_0);
+	e_ctimer_stop(E_CTIMER_0);
+	time = time_s - time_e;
+
+	return time;
+}
+
+
+
+void init_data(float *a);
+
+int main(void) {
+
+	//set up the event list table
+	char event[9][20];
+	strcpy(event[0], "CLK");
+	strcpy(event[1], "IDLE");	
+	strcpy(event[2], "IALU_INST");
+	strcpy(event[3], "FPU_INST");	
+	strcpy(event[4], "DUAL_INST");
+	strcpy(event[5], "E1_STALLS");	
+	strcpy(event[6], "RA_STALLS");
+	strcpy(event[7], "EXT_FETCH_STALLS");	
+	strcpy(event[8], "EXT_LOAD_STALLS");
+
+	unsigned _time;
+	int t;
+
+	sprintf(outbuf, "\n");
+	init_data(inp_data);
+
+	for(t=0; t<9; t++){
+		_time = fir(inp_data, out_o, t);
+		//test
+		//if((t == 3) || (t == 5))
+		//	_time = 500;
+		if((_time<=result[t]*1.05) && (_time>=result[t]*0.95)){
+			sprintf(outbuf + strlen(outbuf), "cycles spent on event %-18s is %-6d cycles!\n", event[t], _time);
+		}
+		else{
+			sprintf(outbuf + strlen(outbuf), "cycles spent on event %-18s is %-6d cycles! Warning, expecting around %-6d 				cycles!\n", event[t], _time, result[t]);
+		}
+	}
+
+	//enable the interruption
+	__asm__ __volatile__ ("GIE");
+	e_reg_write(E_REG_IMASK, 0x0);
+	sprintf(outbuf + strlen(outbuf), "\nTesting event IDLE:\n");
+	//call the idle function
+	_time = idle_test();
+	if((_time<=result[9]*1.05) && (_time>=result[9]*0.95))
+		sprintf(outbuf + strlen(outbuf), "cycles spent on event %-18s is %-6d cycles!\n", event[1], _time);
+	else
+		sprintf(outbuf + strlen(outbuf), "cycles spent on event %-18s is %-6d cycles! Warning, expecting around %-6d cycles\n", 		event[1], _time, result[9]);
+	
+
+	return EXIT_SUCCESS;
+}
+
+
+void init_data(float *a)
+{
+	int i;
+
+	for (i=0; i<_Ndata; i++){
+		a[i] = (i == 0) ? 1 : (i == _Ndata/2) ? 2 : 0;
+	}
+
+	return;
+}

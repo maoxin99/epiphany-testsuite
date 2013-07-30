@@ -1,0 +1,2 @@
+e-gcc -T ${ELDF} src/emain.c  -o Debug/emain.elf -le-lib
+

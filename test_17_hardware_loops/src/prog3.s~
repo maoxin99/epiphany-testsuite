@@ -1,0 +1,55 @@
+//------- start -------------
+//int hwloop();
+
+.file "hwloop.s";
+.section .text;
+.type   _hwloop, %function;
+.global _hwloop;
+.extern _A;   A global array A[] defined in one of the C modules
+.extern _B;
+.extern _result;
+
+.balign 4;
+_hwloop:
+
+    add sp,sp,-28    ; preparing a space in the stack for saving old values
+    strd r0,[sp,0]  ; saving R0, R1
+	str 	r2,[sp,8]	;saving r2
+	strd	r11,[sp,12]	;saving r11 and r12
+	strd	r16,[sp,20]	;saving r16 and r17
+
+	; change the cal type
+	mov 	r16, 0x0
+	movt	r16, 0x8
+	gid
+	movfs	r17, config
+	orr	r17, r17, r16
+	movts	config, r17
+	gie
+
+
+	mov	r0, _A
+	movt	r0, _A
+	mov	r1, _B
+	movt	r1, _B
+	mov	r2, 0x0
+lstart:	ldr	r11, [r0], +0x1 ;load the data
+	ldr	r12, [r1], +0x1
+	fmul 	r11, r11, r12
+lend:	fadd	r2, r2, r11
+	mov	r0, _result
+	movt	r0, _result
+	mov	r0, r2	;save the result into result	
+	
+    	ldrd 	r0,[sp,0]  	;restoring r0, r1
+	ldr 	r2,[sp,8]	;restoring r2
+	ldrd	r11,[sp,12]	;restoring r11 and r12
+	ldrd	r16,[sp,20]	;restoring r16 and r17
+	add 	sp,sp,28
+
+	rts; return
+
+
+.size _hwloop, .-_hwloop;
+//------- end -------------
+

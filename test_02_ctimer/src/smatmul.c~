@@ -1,0 +1,125 @@
+/*
+  hello_world.c
+
+  Copyright (C) 2012 Adapteva, Inc.
+  Contributed by Yaniv Sapir <yaniv@adapteva.com>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program, see the file COPYING.  If not, see
+  <http://www.gnu.org/licenses/>.
+*/
+
+// This is the HOST side of the Hello World example.
+// The program initializes the Epiphany system,
+// randomly draws an eCore and then loads and launches
+// the device program on that eCore. It then reads the
+// shared external memory buffer for the core's output
+// message.
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <e-hal.h>
+
+#define _BufSize   (1024)
+#define _BufOffset (0x01000000)
+//#define _SeqLen    (20)
+
+/*
+float coes[16] =
+	{0.01, 0.02, 0.04, 0.08,
+	 0.16, 0.32, 0.64, 1.28,
+	 1.28, 0.64, 0.32, 0.16,
+	 0.08, 0.04, 0.02, 0.01};
+*/
+
+int main(int argc, char *argv[])
+{
+	unsigned _row, _col, coreid, _i, _j;
+	e_platform_t platform;
+	e_epiphany_t dev;
+	e_mem_t emem;
+	char emsg[_BufSize];
+//	unsigned _k;
+	//float *pa;
+	//pa = &coes[0];
+
+	unsigned _pc;
+
+	srand(1);
+
+	// initialize system, read platform params from
+	// default HDF. Then, reset the platform and
+	// get the actual system parameters.
+	e_init(NULL);
+	e_reset_system();
+	e_get_platform_info(&platform);
+
+	// Allocate a buffer in shared external memory
+	// for message passing from eCore to host.
+	e_alloc(&emem, _BufOffset, _BufSize);
+
+	//open the workgroup
+	_row = platform.rows;
+	_col = platform.cols;
+	e_open(&dev, 0, 0, _row, _col);
+
+	//reset the workgroup
+	for (_i = 0; _i < _row; _i++){
+		for (_j = 0; _j < _col; _j++){
+			e_reset_core(&dev, _i, _j);
+		}
+	}
+	
+	//load the device program on the board
+	e_load_group("esmatmul.srec", &dev, 0, 0, _row, _col, e_false);
+
+
+
+
+	for (_i=0; _i<platform.rows; _i++){
+		for (_j=0; _j<platform.cols; _j++){
+
+/*			//write the coes into the external mem
+			for(_k=0; _k<16; _k++){
+				e_write(&emem, 0, 0, sizeof(float)*_k, &coes[_k], sizeof(float));
+			}
+
+*/
+			coreid = (_i + platform.row) * 64 + _j + platform.col;
+			fprintf(stderr, "Message from eCore 0x%03x (%2d,%2d): \n", coreid, _i, _j);
+			e_start(&dev, _i, _j);
+
+			//wait for core to execute the program
+			usleep(100000);
+
+
+			//_pc = e_read(&dev, _i, _j, E_PC, emsg, sizeof(unsigned)); 
+			//print the message
+			e_read(&emem, 0, 0, 0x0, emsg, _BufSize);
+			fprintf(stderr, "\"%s\"\n", emsg);
+			
+		}	
+	}	
+
+
+	// Release the allocated buffer and finalize the
+	// e-platform connection.
+	e_free(&emem);
+	e_finalize();
+
+	return 0;
+}
+
