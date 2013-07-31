@@ -31,13 +31,14 @@
 #include <unistd.h>
 #include <e-hal.h>
 
-#define _BufSize   (100)
+#define _MAX_CORES 64
+#define _BufSize   (4 * _MAX_CORES)
 #define _BufOffset (0x01000000)
 
 int main(int argc, char *argv[])
 {
-	unsigned rows, cols, coreid, _i, _j;
-	int result[16];
+	unsigned rows, cols, ncores, coreid, i, j;
+	int result[_MAX_CORES];
 	e_platform_t platform;
 	e_epiphany_t dev;
 	e_mem_t emem;
@@ -55,38 +56,38 @@ int main(int argc, char *argv[])
 	e_alloc(&emem, _BufOffset, _BufSize);
 
 	//open the workgroup
-	rows = platform.rows;
-	cols = platform.cols;
+	rows   = platform.rows;
+	cols   = platform.cols;
+	ncores = rows * cols;
 	e_open(&dev, 0, 0, rows, cols);
 
 	//load the device program on the board
 	e_load_group("emain.srec", &dev, 0, 0, rows, cols, E_FALSE);
 	e_start_group(&dev);
-	
+
+	printf("num-cores = %4d\n", ncores);
 	fault = 0x0;
-	for (_i=0;_i<100;_i++)
+	for (i=0; i<100; i++)
 	{
 		usleep(100000);
-		e_read(&emem,0, 0, 0x0, &result, sizeof(int)*16);
+		e_read(&emem, 0, 0, 0x0, &result, ncores*sizeof(int));
 		
-		for (_j=0;_j<16;_j++)
+		for (j=0; j<ncores; j++)
 		{
-			if(result[_j] != result[0])
+			if (result[j] != result[0])
 				fault++;
 		}
 		
-		for (_j=0;_j<4;_j++)
-		{
-			fprintf(stderr,"core%d: 0x%08x  ",_j, result[_j]);
-		}
-		
-		fprintf(stderr,"\n");
-	}		
-	
-	if(fault == 0)
-		fprintf(stderr,"\ntest20: Hardware Barrier Passed!\n");
+		printf("[%3d] ", i);
+		for (j=0;j<ncores;j++)
+			printf("%04x ", result[j]);
+		printf("\n");
+	}
+
+	if (fault == 0)
+		printf("\ntest #20: Hardware Barrier Passed!\n");
 	else
-		fprintf(stderr,"\ntest20: Hardware Barrier Failed! Fault is 0x%08x!\n",fault);
+		printf("\ntest #20: Hardware Barrier Failed! Fault is 0x%08x!\n", fault);
 
 	e_close(&dev);
 	e_free(&emem);
